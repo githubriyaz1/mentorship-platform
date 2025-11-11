@@ -1,0 +1,131 @@
+/* Import the font */
+body {
+    font-family: 'Poppins', 'Roboto', sans-serif;
+    background-color: #0a0a1a; /* Dark navy fallback */
+    color: #fff;
+    overflow-x: hidden; /* Prevent horizontal scroll */
+}
+
+/* --- 1. Animated Gradient Background --- */
+.gradient-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    z-index: -1;
+    background: linear-gradient(300deg, #03045e, #0077b6, #00b4d8, #0a0a1a);
+    background-size: 400% 400%;
+    animation: gradientShift 20s ease infinite;
+}
+
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* --- 2. Glassmorphism Effect --- */
+.glassy-nav,
+.glass-modal,
+.glass-input {
+    /* The Glass Effect */
+    background: rgba(255, 255, 255, 0.05); /* Very transparent white */
+    backdrop-filter: blur(15px); /* The key! This blurs what's behind it */
+    -webkit-backdrop-filter: blur(15px); /* Safari support */
+    border: 1px solid rgba(255, 255, 255, 0.1); /* Subtle border */
+    border-radius: 12px;
+}
+
+/* --- 3. Navbar Styling --- */
+.glassy-nav {
+    border-radius: 0;
+    border-top: 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+    font-size: 1.5rem;
+}
+
+.navbar-brand i {
+    color: #00b4d8; /* Cyan accent */
+    margin-right: 8px;
+}
+
+/* --- 4. Hero Section --- */
+.hero {
+    min-height: 100vh;
+    padding-top: 80px; /* Offset for navbar */
+}
+
+.hero-btn {
+    background-color: #00b4d8; /* Cyan */
+    border-color: #00b4d8;
+    transition: all 0.3s ease;
+}
+.hero-btn:hover {
+    background-color: #0077b6; /* Darker cyan */
+    border-color: #0077b6;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 180, 216, 0.3);
+}
+
+.btn-outline-light:hover {
+    color: #0a0a1a;
+}
+
+/* --- 5. Modal Styling --- */
+.modal-content.glass-modal {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.modal-header, .modal-footer {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Style the modal tabs */
+.nav-pills .nav-link {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.1);
+    margin: 0 5px;
+}
+.nav-pills .nav-link.active, .nav-pills .show > .nav-link {
+    background-color: #00b4d8; /* Cyan accent */
+    color: #fff;
+}
+
+/* Style the glassy form inputs */
+.form-control.glass-input {
+    color: #fff;
+}
+.form-control.glass-input::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+}
+.form-control.glass-input:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #00b4d8; /* Cyan on focus */
+    box-shadow: 0 0 0 0.25rem rgba(0, 180, 216, 0.25);
+    color: #fff;
+}
+
+/* Style the floating labels */
+.form-floating > label {
+    color: rgba(255, 255, 255, 0.6);
+}
+.form-floating > .form-control.glass-input:focus ~ label,
+.form-floating > .form-control.glass-input:not(:placeholder-shown) ~ label {
+    color: #00b4d8;
+    background: transparent; /* Fix for label background */
+}
+
+.form-select.glass-input {
+    color: #fff;
+}
+.form-select.glass-input option {
+    background: #0a0a1a; /* Dark background for dropdown options */
+}
