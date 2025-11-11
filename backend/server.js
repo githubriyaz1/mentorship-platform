@@ -14,24 +14,19 @@ const JWT_SECRET = 'my-super-secret-key-for-mentorship-app';
 app.use(cors());
 app.use(express.json());
 
-// --- 4. MySQL Database Connection (THE FIX IS HERE) ---
+// --- 4. MySQL Database Connection ---
 const dbPool = mysql.createPool({
     host: 'localhost',
     user: 'root',
-    password: 'Allahuakbar@786', // Your local password
+    password: 'Allahuakbar@786', // Your password
     database: 'mentorship_db',
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    multipleStatements: true // Allow multiple queries
+    multipleStatements: true
 }).promise(); // Use .promise() to enable async/await
 
-// Test connection
-dbPool.query('SELECT 1').then(() => {
-    console.log('✅ Connected to MySQL database (mentorship_db)');
-}).catch(err => {
-    console.error('❌ Error connecting to MySQL:', err);
-});
+console.log('✅ Connected to MySQL database (mentorship_db)');
 
 
 // --- 5. Auth Middleware (Bouncers) ---
@@ -90,6 +85,7 @@ app.post('/login', async (req, res) => {
         if (results.length === 0) { return res.status(404).json({ message: 'User not found.' }); }
         
         const user = results[0];
+
         if (user.role === 'mentor' && user.verification_status !== 'verified') {
             return res.status(401).json({ message: 'Your mentor account is still pending approval.' });
         }
@@ -280,7 +276,7 @@ app.post('/create-session', authenticateToken, async (req, res) => {
         });
     } catch (err) {
         console.error('Create session error:', err);
-        return res.status(500).json({ message: 'Server error creating session.' });
+        return res.status(500).json({ message: 'Server error creating session.' }); // <-- THE FIX IS HERE
     }
 });
 
