@@ -12,7 +12,7 @@ $body1 = @{
 
 Write-Host "Testing Invalid Email..."
 try {
-    $response = Invoke-RestMethod -Uri "http://localhost:3001/register" -Method Post -Headers $headers -Body $body1 -ErrorAction Stop
+    $null = Invoke-RestMethod -Uri "http://localhost:3001/register" -Method Post -Headers $headers -Body $body1 -ErrorAction Stop
     Write-Host "FAILED: Should have rejected invalid email." -ForegroundColor Red
 } catch {
     Write-Host "SUCCESS: Rejected invalid email." -ForegroundColor Green
@@ -29,7 +29,7 @@ $body2 = @{
 
 Write-Host "`nTesting Weak Password..."
 try {
-    $response = Invoke-RestMethod -Uri "http://localhost:3001/register" -Method Post -Headers $headers -Body $body2 -ErrorAction Stop
+    $null = Invoke-RestMethod -Uri "http://localhost:3001/register" -Method Post -Headers $headers -Body $body2 -ErrorAction Stop
     Write-Host "FAILED: Should have rejected weak password." -ForegroundColor Red
 } catch {
     Write-Host "SUCCESS: Rejected weak password." -ForegroundColor Green
@@ -47,7 +47,8 @@ $body3 = @{
 Write-Host "`nTesting Valid Registration..."
 try {
     $response = Invoke-RestMethod -Uri "http://localhost:3001/register" -Method Post -Headers $headers -Body $body3 -ErrorAction Stop
-    Write-Host "SUCCESS: Registered valid user." -ForegroundColor Green
+    Write-Host "SUCCESS: Registered valid user. Response:"
+    $response | ConvertTo-Json | Write-Host
 } catch {
     Write-Host "FAILED: Could not register valid user." -ForegroundColor Red
     Write-Host $_.Exception.Message
