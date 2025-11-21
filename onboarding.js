@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-    
+
     const token = localStorage.getItem('mentorConnectToken');
     if (!token) {
         // If no token, kick them out
@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         try {
-            const response = await fetch('http://localhost:3001/create-profile', {
+            const response = await fetch(`${API_BASE_URL}/create-profile`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

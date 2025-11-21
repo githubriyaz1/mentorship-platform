@@ -1,10 +1,10 @@
 // This runs as soon as the dashboard.html page loads
 document.addEventListener("DOMContentLoaded", () => {
-    
+
     // --- 1. Get User Info ---
     const token = localStorage.getItem('mentorConnectToken');
     const userName = localStorage.getItem('mentorConnectUser');
-    const userRole = localStorage.getItem('mentorConnectRole'); 
+    const userRole = localStorage.getItem('mentorConnectRole');
 
     // --- 2. Auth Check ("Gatekeeper") ---
     if (!token) {
@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
         fetchMyBookings(token);
     } else if (userRole === 'mentor') {
         checkMentorProfile(token); // This will call fetchMySessions
-        
+
         // Add the "Add Slot" listener (runs once)
         const createSessionForm = document.getElementById('create-session-form');
         if (createSessionForm) {
@@ -36,12 +36,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 const newSession = await createSession(token, startTime, fee);
                 if (newSession) {
                     const availableList = document.getElementById('mentor-available-list');
+                    // We need to append the new card safely
                     const newCard = createSessionCard(newSession, 'available');
                     const noSlotsMsg = availableList.querySelector('p');
                     if (noSlotsMsg && noSlotsMsg.textContent.includes("no available slots")) {
-                        noSlotsMsg.innerHTML = '';
+                        noSlotsMsg.remove();
                     }
-                    availableList.innerHTML += newCard;
+                    availableList.appendChild(newCard);
                     createSessionForm.reset();
                 }
             });
@@ -49,7 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (userRole === 'admin') {
         fetchPendingMentors(token);
         fetchOpenDisputes(token);
-        fetchAdminStats(token); 
+        fetchAdminStats(token);
         fetchCancellationRequests(token);
     } else {
         document.getElementById('dash-loading-spinner').innerHTML = '<p>Error: Unknown user role.</p>';
@@ -87,7 +88,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- 6. Event Delegation for all dynamic buttons ---
     const dashboardContent = document.getElementById('dashboard-content');
-    
+
     // Listener for "Mark as Complete"
     dashboardContent.addEventListener('click', async (e) => {
         if (e.target && e.target.classList.contains('btn-complete-session')) {
@@ -144,7 +145,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Listener for "Verify Mentor"
     dashboardContent.addEventListener('click', async (e) => {
-        const button = e.target.closest('.btn-verify-mentor'); 
+        const button = e.target.closest('.btn-verify-mentor');
         if (button) {
             const mentorId = button.getAttribute('data-mentor-id');
             if (confirm(`Are you sure you want to verify this mentor?`)) {
@@ -210,7 +211,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // --- Gatekeeper for Mentors ---
 async function checkMentorProfile(token) {
     try {
-        const response = await fetch('http://localhost:3001/check-profile', {
+        const response = await fetch(`${API_BASE_URL}/check-profile`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
@@ -228,7 +229,7 @@ async function checkMentorProfile(token) {
 
 // --- Function for Mentees ---
 async function fetchMyBookings(token) {
-    const response = await fetch('http://localhost:3001/my-bookings', {
+    const response = await fetch(`${API_BASE_URL}/my-bookings`, {
         headers: { 'Authorization': `Bearer ${token}` }
     });
     const menteeDash = document.getElementById('mentee-dashboard');
@@ -239,7 +240,9 @@ async function fetchMyBookings(token) {
         if (bookings.length === 0) {
             list.innerHTML = `<p class="text-white-50">You have no upcoming sessions. <a href="browse.html">Browse mentors</a> to book one!</p>`;
         } else {
-            bookings.forEach(booking => { list.innerHTML += createMenteeBookingCard(booking); });
+            bookings.forEach(booking => {
+                list.appendChild(createMenteeBookingCard(booking));
+            });
         }
     } else {
         list.innerHTML = `<p class="text-danger">Error loading your bookings.</p>`;
@@ -254,47 +257,70 @@ function createMenteeBookingCard(booking) {
     const formattedTime = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
     let cardClass = 'glass-input p-3';
-    let actionButton = '';
+    let actionButton = null;
 
     if (booking.status === 'completed') {
         cardClass = 'glass-input p-3 bg-secondary bg-opacity-25';
         if (booking.feedback_given > 0) {
-            actionButton = '<button class="btn btn-outline-success btn-sm mt-2" disabled>Feedback Submitted</button>';
+            actionButton = document.createElement('button');
+            actionButton.className = 'btn btn-outline-success btn-sm mt-2';
+            actionButton.disabled = true;
+            actionButton.textContent = 'Feedback Submitted';
         } else {
-            actionButton = `<button class="btn btn-outline-light btn-sm mt-2 btn-leave-feedback" 
-                                data-bs-toggle="modal" data-bs-target="#feedbackModal"
-                                data-session-id="${booking.session_id}">
-                                Leave Feedback
-                              </button>`;
+            actionButton = document.createElement('button');
+            actionButton.className = 'btn btn-outline-light btn-sm mt-2 btn-leave-feedback';
+            actionButton.setAttribute('data-bs-toggle', 'modal');
+            actionButton.setAttribute('data-bs-target', '#feedbackModal');
+            actionButton.setAttribute('data-session-id', booking.session_id);
+            actionButton.textContent = 'Leave Feedback';
         }
     } else if (booking.status === 'booked') {
-        actionButton = `<button class="btn btn-outline-danger btn-sm mt-2 btn-raise-dispute"
-                        data-booking-id="${booking.booking_id}">
-                        Report an Issue
-                      </button>`;
+        actionButton = document.createElement('button');
+        actionButton.className = 'btn btn-outline-danger btn-sm mt-2 btn-raise-dispute';
+        actionButton.setAttribute('data-booking-id', booking.booking_id);
+        actionButton.textContent = 'Report an Issue';
     } else if (booking.status === 'pending_cancellation') {
         cardClass = 'glass-input p-3 bg-warning bg-opacity-10';
-        actionButton = `<span class="badge bg-warning text-dark mt-2">Cancellation Pending</span>`;
+        actionButton = document.createElement('span');
+        actionButton.className = 'badge bg-warning text-dark mt-2';
+        actionButton.textContent = 'Cancellation Pending';
     } else if (booking.status === 'canceled') {
         cardClass = 'glass-input p-3 bg-danger bg-opacity-10';
-        actionButton = `<span class="badge bg-danger mt-2">Session Canceled</span>`;
+        actionButton = document.createElement('span');
+        actionButton.className = 'badge bg-danger mt-2';
+        actionButton.textContent = 'Session Canceled';
     }
 
-    return `
-        <div class="col-md-6">
-            <div class="${cardClass}">
-                <h5 class="text-white">Session with ${booking.mentor_name}</h5>
-                <p class="text-white-50 mb-0">
-                    <i class="bi bi-calendar-check"></i> ${formattedDate} at ${formattedTime}
-                </p>
-                ${actionButton}
-            </div>
-        </div>`;
+    const col = document.createElement('div');
+    col.className = 'col-md-6';
+
+    const cardDiv = document.createElement('div');
+    cardDiv.className = cardClass;
+
+    const h5 = document.createElement('h5');
+    h5.className = 'text-white';
+    h5.textContent = `Session with ${booking.mentor_name}`;
+    cardDiv.appendChild(h5);
+
+    const p = document.createElement('p');
+    p.className = 'text-white-50 mb-0';
+    const icon = document.createElement('i');
+    icon.className = 'bi bi-calendar-check';
+    p.appendChild(icon);
+    p.appendChild(document.createTextNode(` ${formattedDate} at ${formattedTime}`));
+    cardDiv.appendChild(p);
+
+    if (actionButton) {
+        cardDiv.appendChild(actionButton);
+    }
+
+    col.appendChild(cardDiv);
+    return col;
 }
 
 // --- Function for Mentors ---
 async function fetchMySessions(token) {
-    const response = await fetch('http://localhost:3001/my-sessions', {
+    const response = await fetch(`${API_BASE_URL}/my-sessions`, {
         headers: { 'Authorization': `Bearer ${token}` }
     });
     const mentorDash = document.getElementById('mentor-dashboard');
@@ -305,14 +331,14 @@ async function fetchMySessions(token) {
     } else {
         bookedList.innerHTML = `<p class="text-danger">Error loading your sessions.</p>`;
     }
-    
+
     document.getElementById('dash-loading-spinner').classList.add('d-none');
     mentorDash.classList.remove('d-none');
 }
 
 // --- Function for Admins ---
 async function fetchPendingMentors(token) {
-    const response = await fetch('http://localhost:3001/admin/pending-mentors', {
+    const response = await fetch(`${API_BASE_URL}/admin/pending-mentors`, {
         headers: { 'Authorization': `Bearer ${token}` }
     });
     const adminDash = document.getElementById('admin-dashboard');
@@ -326,18 +352,37 @@ async function fetchPendingMentors(token) {
             mentors.forEach(mentor => {
                 const date = new Date(mentor.created_at);
                 const formattedDate = date.toLocaleDateString();
-                list.innerHTML += `
-                    <div class="col-12" id="mentor-row-${mentor.user_id}">
-                        <div class="glass-input p-3 d-flex justify-content-between align-items-center">
-                            <div>
-                                <h5 class="text-white mb-0">${mentor.name}</h5>
-                                <p class="text-white-50 mb-0">${mentor.email} (Registered: ${formattedDate})</p>
-                            </div>
-                            <button class="btn btn-success btn-verify-mentor" data-mentor-id="${mentor.user_id}">
-                                <i class="bi bi-patch-check-fill"></i> Verify
-                            </button>
-                        </div>
-                    </div>`;
+
+                const col = document.createElement('div');
+                col.className = 'col-12';
+                col.id = `mentor-row-${mentor.user_id}`;
+
+                const card = document.createElement('div');
+                card.className = 'glass-input p-3 d-flex justify-content-between align-items-center';
+
+                const infoDiv = document.createElement('div');
+                const h5 = document.createElement('h5');
+                h5.className = 'text-white mb-0';
+                h5.textContent = mentor.name;
+                infoDiv.appendChild(h5);
+
+                const p = document.createElement('p');
+                p.className = 'text-white-50 mb-0';
+                p.textContent = `${mentor.email} (Registered: ${formattedDate})`;
+                infoDiv.appendChild(p);
+                card.appendChild(infoDiv);
+
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-success btn-verify-mentor';
+                btn.setAttribute('data-mentor-id', mentor.user_id);
+                const icon = document.createElement('i');
+                icon.className = 'bi bi-patch-check-fill';
+                btn.appendChild(icon);
+                btn.appendChild(document.createTextNode(' Verify'));
+                card.appendChild(btn);
+
+                col.appendChild(card);
+                list.appendChild(col);
             });
         }
     } else {
@@ -346,7 +391,7 @@ async function fetchPendingMentors(token) {
     adminDash.classList.remove('d-none');
 }
 async function fetchOpenDisputes(token) {
-    const response = await fetch('http://localhost:3001/admin/open-disputes', {
+    const response = await fetch(`${API_BASE_URL}/admin/open-disputes`, {
         headers: { 'Authorization': `Bearer ${token}` }
     });
     const list = document.getElementById('admin-disputes-list');
@@ -357,20 +402,40 @@ async function fetchOpenDisputes(token) {
             list.innerHTML = `<p class="text-white-50">No open disputes.</p>`;
         } else {
             disputes.forEach(dispute => {
-                list.innerHTML += `
-                    <div class="col-12" id="dispute-row-${dispute.dispute_id}">
-                        <div class="glass-input p-3">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <h5 class="text-white mb-0">Dispute #${dispute.dispute_id}</h5>
-                                <button class="btn btn-warning btn-resolve-dispute" data-dispute-id="${dispute.dispute_id}">
-                                    Resolve
-                                </button>
-                            </div>
-                            <p class="text-white-50 mt-2 mb-1">Raised by: ${dispute.mentee_name}</p>
-                            <p class="text-white-50 mb-0">Reason: "${dispute.reason}"</p>
-                        </div>
-                    </div>
-                `;
+                const col = document.createElement('div');
+                col.className = 'col-12';
+                col.id = `dispute-row-${dispute.dispute_id}`;
+
+                const card = document.createElement('div');
+                card.className = 'glass-input p-3';
+
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'd-flex justify-content-between align-items-center';
+
+                const h5 = document.createElement('h5');
+                h5.className = 'text-white mb-0';
+                h5.textContent = `Dispute #${dispute.dispute_id}`;
+                headerDiv.appendChild(h5);
+
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-warning btn-resolve-dispute';
+                btn.setAttribute('data-dispute-id', dispute.dispute_id);
+                btn.textContent = 'Resolve';
+                headerDiv.appendChild(btn);
+                card.appendChild(headerDiv);
+
+                const pRaisedBy = document.createElement('p');
+                pRaisedBy.className = 'text-white-50 mt-2 mb-1';
+                pRaisedBy.textContent = `Raised by: ${dispute.mentee_name}`;
+                card.appendChild(pRaisedBy);
+
+                const pReason = document.createElement('p');
+                pReason.className = 'text-white-50 mb-0';
+                pReason.textContent = `Reason: "${dispute.reason}"`;
+                card.appendChild(pReason);
+
+                col.appendChild(card);
+                list.appendChild(col);
             });
         }
     } else {
@@ -379,7 +444,7 @@ async function fetchOpenDisputes(token) {
 }
 async function fetchAdminStats(token) {
     try {
-        const response = await fetch('http://localhost:3001/admin/stats', {
+        const response = await fetch(`${API_BASE_URL}/admin/stats`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.ok) {
@@ -401,7 +466,7 @@ async function fetchAdminStats(token) {
                 },
                 options: {
                     responsive: true,
-                    plugins: { legend: { labels: { color: '#ffffff' }}}
+                    plugins: { legend: { labels: { color: '#ffffff' } } }
                 }
             });
         }
@@ -411,7 +476,7 @@ async function fetchAdminStats(token) {
     document.getElementById('dash-loading-spinner').classList.add('d-none');
 }
 async function fetchCancellationRequests(token) {
-    const response = await fetch('http://localhost:3001/admin/cancellation-requests', {
+    const response = await fetch(`${API_BASE_URL}/admin/cancellation-requests`, {
         headers: { 'Authorization': `Bearer ${token}` }
     });
     const list = document.getElementById('admin-cancellation-list');
@@ -422,20 +487,40 @@ async function fetchCancellationRequests(token) {
             list.innerHTML = `<p class="text-white-50">No pending cancellation requests.</p>`;
         } else {
             requests.forEach(req => {
-                list.innerHTML += `
-                    <div class="col-12" id="cancellation-row-${req.request_id}">
-                        <div class="glass-input p-3">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <h5 class="text-white mb-0">Request #${req.request_id} (Session ${req.session_id})</h5>
-                                <button class="btn btn-success btn-approve-cancellation" data-request-id="${req.request_id}">
-                                    Approve
-                                </button>
-                            </div>
-                            <p class="text-white-50 mt-2 mb-1">Mentor: ${req.mentor_name}</p>
-                            <p class="text-white-50 mb-0">Reason: "${req.reason}"</p>
-                        </div>
-                    </div>
-                `;
+                const col = document.createElement('div');
+                col.className = 'col-12';
+                col.id = `cancellation-row-${req.request_id}`;
+
+                const card = document.createElement('div');
+                card.className = 'glass-input p-3';
+
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'd-flex justify-content-between align-items-center';
+
+                const h5 = document.createElement('h5');
+                h5.className = 'text-white mb-0';
+                h5.textContent = `Request #${req.request_id} (Session ${req.session_id})`;
+                headerDiv.appendChild(h5);
+
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-success btn-approve-cancellation';
+                btn.setAttribute('data-request-id', req.request_id);
+                btn.textContent = 'Approve';
+                headerDiv.appendChild(btn);
+                card.appendChild(headerDiv);
+
+                const pMentor = document.createElement('p');
+                pMentor.className = 'text-white-50 mt-2 mb-1';
+                pMentor.textContent = `Mentor: ${req.mentor_name}`;
+                card.appendChild(pMentor);
+
+                const pReason = document.createElement('p');
+                pReason.className = 'text-white-50 mb-0';
+                pReason.textContent = `Reason: "${req.reason}"`;
+                card.appendChild(pReason);
+
+                col.appendChild(card);
+                list.appendChild(col);
             });
         }
     } else {
@@ -447,9 +532,9 @@ async function fetchCancellationRequests(token) {
 // --- Helper Functions ---
 async function resolveDispute(token, disputeId, resolutionNotes) {
     try {
-        const response = await fetch('http://localhost:3001/admin/resolve-dispute', {
+        const response = await fetch(`${API_BASE_URL}/admin/resolve-dispute`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ disputeId, resolutionNotes })
         });
         return response.ok;
@@ -458,11 +543,11 @@ async function resolveDispute(token, disputeId, resolutionNotes) {
         return false;
     }
 }
-async function verifyMentor(token, mentorId) { 
+async function verifyMentor(token, mentorId) {
     try {
-        const response = await fetch('http://localhost:3001/admin/verify-mentor', {
+        const response = await fetch(`${API_BASE_URL}/admin/verify-mentor`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ mentorId })
         });
         return response.ok;
@@ -474,79 +559,118 @@ async function verifyMentor(token, mentorId) {
 function renderMentorSessions(sessions) {
     const bookedList = document.getElementById('mentor-booked-list');
     const availableList = document.getElementById('mentor-available-list');
-    bookedList.innerHTML = ''; 
+    bookedList.innerHTML = '';
     availableList.innerHTML = '';
     const booked = sessions.filter(s => s.status === 'booked');
     const available = sessions.filter(s => s.status === 'available');
     const pending = sessions.filter(s => s.status === 'pending_cancellation');
-    
-    if (booked.length === 0) { bookedList.innerHTML = `<p class="text-white-50">You have no upcoming booked sessions.</p>`; } 
-    else { booked.forEach(session => { bookedList.innerHTML += createSessionCard(session, 'booked'); }); }
-    
-    if (available.length === 0) { availableList.innerHTML = `<p class="text-white-50">You have no available slots.</p>`; } 
-    else { available.forEach(session => { availableList.innerHTML += createSessionCard(session, 'available'); }); }
+
+    if (booked.length === 0) { bookedList.innerHTML = `<p class="text-white-50">You have no upcoming booked sessions.</p>`; }
+    else { booked.forEach(session => { bookedList.appendChild(createSessionCard(session, 'booked')); }); }
+
+    if (available.length === 0) { availableList.innerHTML = `<p class="text-white-50">You have no available slots.</p>`; }
+    else { available.forEach(session => { availableList.appendChild(createSessionCard(session, 'available')); }); }
 
     if (pending.length > 0) {
         if (booked.length === 0) bookedList.innerHTML = '';
-        pending.forEach(session => { bookedList.innerHTML += createSessionCard(session, 'pending_cancellation'); });
+        pending.forEach(session => { bookedList.appendChild(createSessionCard(session, 'pending_cancellation')); });
     }
 }
 function createSessionCard(session, type) {
     const date = new Date(session.start_time);
     const formattedDate = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     const formattedTime = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-    
+
+    const col = document.createElement('div');
+
     if (type === 'booked') {
-        return `
-            <div class="col-md-6" id="session-card-${session.session_id}">
-                <div class="glass-input p-3 bg-primary bg-opacity-10">
-                    <h5 class="text-white">Session with ${session.mentee_name || '...'}</h5>
-                    <p class="text-white-50 mb-2">
-                        <i class="bi bi-calendar-check"></i> ${formattedDate} at ${formattedTime}
-                    </p>
-                    <button class="btn btn-outline-light btn-sm btn-complete-session me-2" data-session-id="${session.session_id}">
-                        Mark as Complete
-                    </button>
-                    <button class="btn btn-outline-danger btn-sm btn-cancel-session" data-session-id="${session.session_id}">
-                        Request Cancellation
-                    </button>
-                </div>
-            </div>`;
+        col.className = 'col-md-6';
+        col.id = `session-card-${session.session_id}`;
+
+        const card = document.createElement('div');
+        card.className = 'glass-input p-3 bg-primary bg-opacity-10';
+
+        const h5 = document.createElement('h5');
+        h5.className = 'text-white';
+        h5.textContent = `Session with ${session.mentee_name || '...'}`;
+        card.appendChild(h5);
+
+        const p = document.createElement('p');
+        p.className = 'text-white-50 mb-2';
+        p.innerHTML = `<i class="bi bi-calendar-check"></i> ${formattedDate} at ${formattedTime}`;
+        card.appendChild(p);
+
+        const btnComplete = document.createElement('button');
+        btnComplete.className = 'btn btn-outline-light btn-sm btn-complete-session me-2';
+        btnComplete.setAttribute('data-session-id', session.session_id);
+        btnComplete.textContent = 'Mark as Complete';
+        card.appendChild(btnComplete);
+
+        const btnCancel = document.createElement('button');
+        btnCancel.className = 'btn btn-outline-danger btn-sm btn-cancel-session';
+        btnCancel.setAttribute('data-session-id', session.session_id);
+        btnCancel.textContent = 'Request Cancellation';
+        card.appendChild(btnCancel);
+
+        col.appendChild(card);
+
     } else if (type === 'pending_cancellation') {
-        return `
-            <div class="col-md-6" id="session-card-${session.session_id}">
-                <div class="glass-input p-3 bg-warning bg-opacity-10">
-                    <h5 class="text-white">Session with ${session.mentee_name || '...'}</h5>
-                    <p class="text-white-50 mb-2">
-                        <i class="bi bi-calendar-check"></i> ${formattedDate} at ${formattedTime}
-                    </p>
-                    <button class="btn btn-warning btn-sm" disabled>
-                        Cancellation Pending
-                    </button>
-                </div>
-            </div>`;
+        col.className = 'col-md-6';
+        col.id = `session-card-${session.session_id}`;
+
+        const card = document.createElement('div');
+        card.className = 'glass-input p-3 bg-warning bg-opacity-10';
+
+        const h5 = document.createElement('h5');
+        h5.className = 'text-white';
+        h5.textContent = `Session with ${session.mentee_name || '...'}`;
+        card.appendChild(h5);
+
+        const p = document.createElement('p');
+        p.className = 'text-white-50 mb-2';
+        p.innerHTML = `<i class="bi bi-calendar-check"></i> ${formattedDate} at ${formattedTime}`;
+        card.appendChild(p);
+
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-warning btn-sm';
+        btn.disabled = true;
+        btn.textContent = 'Cancellation Pending';
+        card.appendChild(btn);
+
+        col.appendChild(card);
+
     } else { // type === 'available'
-        // --- THIS IS THE FIX ---
-        return `
-            <div class="col-md-4" id="session-card-${session.session_id}">
-                <div class="glass-input p-3 position-relative">
-                    <p class="text-white-50 mb-0">
-                        <i class="bi bi-calendar-event"></i> ${formattedDate} at ${formattedTime}
-                    </p>
-                    <button class="btn btn-outline-danger btn-sm btn-delete-slot position-absolute" 
-                            style="top: 5px; right: 5px;" 
-                            data-session-id="${session.session_id}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            </div>`;
+        col.className = 'col-md-4';
+        col.id = `session-card-${session.session_id}`;
+
+        const card = document.createElement('div');
+        card.className = 'glass-input p-3 position-relative';
+
+        const p = document.createElement('p');
+        p.className = 'text-white-50 mb-0';
+        p.innerHTML = `<i class="bi bi-calendar-event"></i> ${formattedDate} at ${formattedTime}`;
+        card.appendChild(p);
+
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-outline-danger btn-sm btn-delete-slot position-absolute';
+        btn.style.top = '5px';
+        btn.style.right = '5px';
+        btn.setAttribute('data-session-id', session.session_id);
+
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-trash';
+        btn.appendChild(icon);
+
+        card.appendChild(btn);
+        col.appendChild(card);
     }
+    return col;
 }
 async function createSession(token, startTime, fee) {
     try {
-        const response = await fetch('http://localhost:3001/create-session', {
+        const response = await fetch(`${API_BASE_URL}/create-session`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ startTime, fee })
         });
         const data = await response.json();
@@ -565,9 +689,9 @@ async function createSession(token, startTime, fee) {
 }
 async function completeSession(token, sessionId) {
     try {
-        const response = await fetch('http://localhost:3001/complete-session', {
+        const response = await fetch(`${API_BASE_URL}/complete-session`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ sessionId })
         });
         return response.ok;
@@ -578,7 +702,7 @@ async function completeSession(token, sessionId) {
 }
 async function requestCancellation(token, sessionId, reason) {
     try {
-        const response = await fetch('http://localhost:3001/request-cancellation', {
+        const response = await fetch(`${API_BASE_URL}/request-cancellation`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -594,9 +718,9 @@ async function requestCancellation(token, sessionId, reason) {
 }
 async function approveCancellation(token, requestId, adminNotes) {
     try {
-        const response = await fetch('http://localhost:3001/admin/approve-cancellation', {
+        const response = await fetch(`${API_BASE_URL}/admin/approve-cancellation`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ requestId, adminNotes })
         });
         return response.ok;
@@ -607,9 +731,9 @@ async function approveCancellation(token, requestId, adminNotes) {
 }
 async function submitFeedback(token, sessionId, score, comments) {
     try {
-        const response = await fetch('http://localhost:3001/submit-feedback', {
+        const response = await fetch(`${API_BASE_URL}/submit-feedback`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ sessionId, score, comments })
         });
         return response.ok;
@@ -622,7 +746,7 @@ async function submitFeedback(token, sessionId, score, comments) {
 // --- NEW: Helper to call delete-slot API ---
 async function deleteSlot(token, sessionId) {
     try {
-        const response = await fetch(`http://localhost:3001/delete-slot/${sessionId}`, {
+        const response = await fetch(`${API_BASE_URL}/delete-slot/${sessionId}`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${token}`

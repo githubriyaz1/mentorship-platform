@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-    
+
     // 1. Get the booking ID we saved
     const bookingId = localStorage.getItem('disputeBookingId');
     const token = localStorage.getItem('mentorConnectToken');
@@ -17,14 +17,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const disputeForm = document.getElementById('dispute-form');
     disputeForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
+
         const reason = document.getElementById('dispute-reason').value;
         const submitButton = document.getElementById('dispute-submit-btn');
         submitButton.disabled = true;
         submitButton.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Submitting...';
 
         try {
-            const response = await fetch('http://localhost:3001/raise-dispute', {
+            const response = await fetch(`${API_BASE_URL}/raise-dispute`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

@@ -138,6 +138,146 @@
                             <textarea class="form-control glass-input" id="feedback-comments" rows="4" placeholder="What went well? What could be improved?"></textarea>
                         </div>
                         <button type="submit" class="btn btn-primary hero-btn w-100">Submit Feedback</button>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Dashboard - MentorConnect</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="gradient-background"></div>
+
+    <!-- 1. Glassy Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark glassy-nav fixed-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="index.html"><i class="bi bi-diagram-3-fill"></i> MentorConnect</a>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto" id="nav-container">
+                    <!-- Nav items will be dynamically added by script.js -->
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 2. Dashboard Content -->
+    <main class="container" style="padding-top: 120px;">
+        <div class="glass-modal p-4 p-md-5">
+            <h1 class="display-4 fw-bold text-white" id="welcome-header">Welcome back!</h1>
+            <p class="lead text-white-50">This is your dashboard. Only you can see this.</p>
+            <hr class="border-light">
+
+            <div id="dashboard-content">
+                <!-- Loading spinner -->
+                <div class="text-center text-white" id="dash-loading-spinner">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="lead mt-2">Loading your dashboard...</p>
+                </div>
+
+                <!-- Mentee content will go here -->
+                <div id="mentee-dashboard" class="d-none">
+                    <h3 class="text-white">Your Upcoming Sessions</h3>
+                    <div id="mentee-bookings-list" class="row g-3">
+                        <!-- Bookings will be injected here -->
+                    </div>
+                </div>
+
+                <!-- Mentor content will go here -->
+                <div id="mentor-dashboard" class="d-none">
+                    <h3 class="text-white">Manage Your Availability</h3>
+                    <form class="row g-3 align-items-end mb-4" id="create-session-form">
+                        <div class="col-sm-6">
+                            <label for="session-start-time" class="form-label text-white-50">New Slot Date & Time</label>
+                            <input type="datetime-local" class="form-control glass-input" id="session-start-time" required>
+                        </div>
+                        <div class="col-sm-3">
+                            <label for="session-fee" class="form-label text-white-50">Fee ($)</label>
+                            <input type="number" class="form-control glass-input" id="session-fee" placeholder="0.00" min="0" step="0.01">
+                        </div>
+                        <div class="col-sm-3">
+                            <button type="submit" class="btn btn-primary hero-btn w-100">Add Slot</button>
+                        </div>
+                    </form>
+                    <hr class="border-light">
+                    <h3 class="text-white">Your Booked Sessions</h3>
+                    <div id="mentor-booked-list" class="row g-3"></div>
+                    <h3 class="text-white mt-5">Your Available Slots</h3>
+                    <div id="mentor-available-list" class="row g-3"></div>
+                </div>
+                
+                <!-- Admin content will go here -->
+                <div id="admin-dashboard" class="d-none">
+                    <h3 class="text-white">Platform Stats</h3>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-8">
+                            <div class="glass-input p-3">
+                                <canvas id="statsChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="glass-input p-3 h-100">
+                                <h5 class="text-white">Total Revenue</h5>
+                                <h2 class="text-white fw-bold" id="stats-revenue">$0.00</h2>
+                                <p class="text-white-50 mb-0">From <span id="stats-sessions">0</span> completed sessions.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <hr class="border-light">
+
+                    <!-- NEW: Cancellation Requests Section -->
+                    <h3 class="text-white mt-5">Pending Cancellation Requests</h3>
+                    <div id="admin-cancellation-list" class="row g-3">
+                        <!-- Cancellation requests will be injected here -->
+                    </div>
+
+                    <h3 class="text-white mt-5">Pending Mentor Approvals</h3>
+                    <div id="admin-pending-list" class="row g-3">
+                        <!-- Pending mentors will be injected here -->
+                    </div>
+
+                    <h3 class="text-white mt-5">Open Disputes</h3>
+                    <div id="admin-disputes-list" class="row g-3">
+                        <!-- Open disputes will be injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Feedback Modal -->
+    <div class="modal fade" id="feedbackModal" tabindex="-1" aria-labelledby="feedbackModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-modal">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title text-white" id="feedbackModalLabel">Leave Feedback</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="feedback-form">
+                        <input type="hidden" id="feedback-session-id">
+                        <div class="mb-3">
+                            <label for="feedback-score" class="form-label text-white">Rating (1-5)</label>
+                            <select class="form-select glass-input" id="feedback-score" required>
+                                <option value="" selected disabled>Select a score...</option>
+                                <option value="5">5 - Excellent</option>
+                                <option value="4">4 - Very Good</option>
+                                <option value="3">3 - Good</option>
+                                <option value="2">2 - Fair</option>
+                                <option value="1">1 - Poor</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="feedback-comments" class="form-label text-white">Comments (optional)</label>
+                            <textarea class="form-control glass-input" id="feedback-comments" rows="4" placeholder="What went well? What could be improved?"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary hero-btn w-100">Submit Feedback</button>
                     </form>
                 </div>
             </div>
@@ -146,6 +286,7 @@
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="config.js"></script>
     <script src="script.js"></script>
     <script src="dashboard-logic.js"></script>
 </body>

@@ -1,14 +1,21 @@
 // --- 1. Import Packages ---
+require('dotenv').config(); // Load environment variables
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const xss = require('xss'); // Import xss for sanitization
 
 // --- 2. Setup App ---
 const app = express();
-const PORT = 3001;
-const JWT_SECRET = 'my-super-secret-key-for-mentorship-app';
+const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+    console.error('FATAL ERROR: JWT_SECRET is not defined in .env');
+    process.exit(1);
+}
 
 // --- 3. Setup Middleware ---
 app.use(cors());
@@ -16,17 +23,17 @@ app.use(express.json());
 
 // --- 4. MySQL Database Connection ---
 const dbPool = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: 'Allahuakbar@786', // Your password
-    database: 'mentorship_db',
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
     multipleStatements: true
-}).promise(); // Use .promise() to enable async/await
+}).promise();
 
-console.log('✅ Connected to MySQL database (mentorship_db)');
+console.log(`✅ Connected to MySQL database (${process.env.DB_NAME})`);
 
 
 // --- 5. Auth Middleware (Bouncers) ---
@@ -36,7 +43,7 @@ const authenticateToken = (req, res, next) => {
     if (token == null) return res.status(401).json({ message: 'No token provided.' });
     jwt.verify(token, JWT_SECRET, (err, userPayload) => {
         if (err) return res.status(403).json({ message: 'Invalid token.' });
-        req.user = userPayload; 
+        req.user = userPayload;
         next();
     });
 };
@@ -48,28 +55,64 @@ const adminBouncer = (req, res, next) => {
     next(); // They are an admin, let them pass
 };
 
+// --- Validation Helpers ---
+function validateEmail(email) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+}
+
+function validatePassword(password) {
+    // Min 8 chars, at least one letter and one number
+    const re = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{8,}$/;
+    return re.test(password);
+}
+
 
 // --- 6. API Routes (ALL must be before app.listen) ---
 app.get('/', (req, res) => { res.json({ message: '👋 Welcome to the MentorConnect API!' }); });
 
 // === User Registration Route ===
 app.post('/register', async (req, res) => {
-    const { name, email, password, role } = req.body;
-    if (!name || !email || !password || !role) { return res.status(400).json({ message: 'Please provide all fields.' }); }
+    // Sanitize inputs
+    const name = xss(req.body.name);
+    const email = xss(req.body.email);
+    const password = req.body.password; // Don't sanitize password, we hash it
+    const role = xss(req.body.role);
+
+    if (!name || !email || !password || !role) {
+        return res.status(400).json({ message: 'Please provide all fields.' });
+    }
+
+    if (!validateEmail(email)) {
+        return res.status(400).json({ message: 'Invalid email format.' });
+    }
+
+    if (!validatePassword(password)) {
+        return res.status(400).json({ message: 'Password must be at least 8 characters long and contain at least one letter and one number.' });
+    }
+
     try {
-        let verificationStatus = 'verified'; 
+        let verificationStatus = 'verified';
         if (role === 'mentor') {
-            verificationStatus = 'pending'; 
+            verificationStatus = 'pending';
         }
+
+        // Hash password
         const salt = await bcrypt.genSalt(10);
         const password_hash = await bcrypt.hash(password, salt);
+
         const query = 'INSERT INTO Users (name, email, password_hash, role, verification_status) VALUES (?, ?, ?, ?, ?)';
         const values = [name, email, password_hash, role, verificationStatus];
+
         const [results] = await dbPool.query(query, values);
         console.log('User registered:', results.insertId);
+
         return res.status(201).json({ message: 'User registered successfully!', userId: results.insertId });
+
     } catch (err) {
-        if (err.code === 'ER_DUP_ENTRY') { return res.status(400).json({ message: 'Email already exists.' }); }
+        if (err.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({ message: 'Email already exists.' });
+        }
         console.error('Database error:', err);
         return res.status(500).json({ message: 'Server error during registration.' });
     }
@@ -77,13 +120,15 @@ app.post('/register', async (req, res) => {
 
 // === User Login Route ===
 app.post('/login', async (req, res) => {
-    const { email, password } = req.body;
+    const email = xss(req.body.email);
+    const password = req.body.password;
+
     if (!email || !password) { return res.status(400).json({ message: 'Please provide email and password.' }); }
     try {
         const query = 'SELECT * FROM Users WHERE email = ?';
         const [results] = await dbPool.query(query, [email]);
         if (results.length === 0) { return res.status(404).json({ message: 'User not found.' }); }
-        
+
         const user = results[0];
 
         if (user.role === 'mentor' && user.verification_status !== 'verified') {
@@ -91,7 +136,7 @@ app.post('/login', async (req, res) => {
         }
         const isPasswordMatch = await bcrypt.compare(password, user.password_hash);
         if (!isPasswordMatch) { return res.status(401).json({ message: 'Invalid credentials.' }); }
-        
+
         const payload = { userId: user.user_id, role: user.role, name: user.name };
         const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
         console.log(`User ${user.email} logged in successfully.`);
@@ -145,10 +190,10 @@ app.get('/mentor/:id', async (req, res) => {
         `;
         const [profileResults] = await dbPool.query(profileQuery, [mentorId]);
         const [sessionsResults] = await dbPool.query(sessionsQuery, [mentorId]);
-        const [feedbackResults] = await dbPool.query(feedbackQuery, [mentorId]); 
+        const [feedbackResults] = await dbPool.query(feedbackQuery, [mentorId]);
         if (profileResults.length === 0) { return res.status(404).json({ message: 'Mentor not found or not verified.' }); }
-        const mentorData = { 
-            profile: profileResults[0], 
+        const mentorData = {
+            profile: profileResults[0],
             sessions: sessionsResults,
             feedback: feedbackResults
         };
@@ -193,7 +238,7 @@ app.post('/book', authenticateToken, async (req, res) => {
     try {
         const sessionQuery = 'SELECT * FROM Mentorship_Sessions WHERE session_id = ? AND status = "available" FOR UPDATE';
         const [sessionResults] = await connection.query(sessionQuery, [sessionId]);
-        if(sessionResults.length === 0) {
+        if (sessionResults.length === 0) {
             await connection.rollback();
             connection.release();
             return res.status(409).json({ message: 'Session just became unavailable.' });
@@ -262,6 +307,13 @@ app.post('/create-session', authenticateToken, async (req, res) => {
     const mentorId = req.user.userId;
     const { startTime, duration, fee } = req.body;
     if (!startTime) { return res.status(400).json({ message: 'Start time is required.' }); }
+
+    // Validate start time is in the future
+    const sessionDate = new Date(startTime);
+    if (sessionDate <= new Date()) {
+        return res.status(400).json({ message: 'Session start time must be in the future.' });
+    }
+
     const query = `
         INSERT INTO Mentorship_Sessions (mentor_id, start_time, duration_minutes, fee, status)
         VALUES (?, ?, ?, ?, 'available');
@@ -270,13 +322,13 @@ app.post('/create-session', authenticateToken, async (req, res) => {
     const sessionFee = fee || 0.00;
     try {
         const [results] = await dbPool.query(query, [mentorId, startTime, sessionDuration, sessionFee]);
-        res.status(201).json({ 
+        res.status(201).json({
             message: 'Session created successfully!',
             newSession: { session_id: results.insertId, start_time: startTime, status: 'available', mentee_name: null }
         });
     } catch (err) {
         console.error('Create session error:', err);
-        return res.status(500).json({ message: 'Server error creating session.' }); // <-- THE FIX IS HERE
+        return res.status(500).json({ message: 'Server error creating session.' });
     }
 });
 
@@ -286,24 +338,22 @@ app.post('/complete-session', authenticateToken, async (req, res) => {
     const mentorId = req.user.userId;
     const { sessionId } = req.body;
     if (!sessionId) { return res.status(400).json({ message: 'Session ID is required.' }); }
-    const query = `
-        UPDATE Mentorship_Sessions
-        SET status = 'completed'
-        WHERE session_id = ? AND mentor_id = ? AND status = 'booked';
-    `;
     try {
-        const [results] = await dbPool.query(query, [sessionId, mentorId]);
+        const [results] = await dbPool.query(
+            'UPDATE Mentorship_Sessions SET status = "completed" WHERE session_id = ? AND mentor_id = ? AND status = "booked"',
+            [sessionId, mentorId]
+        );
         if (results.affectedRows === 0) {
             return res.status(404).json({ message: 'Session not found or not in "booked" state.' });
         }
-        return res.status(200).json({ message: 'Session marked as complete!' });
+        return res.status(200).json({ message: 'Session marked as complete.' });
     } catch (err) {
         console.error('Complete session error:', err);
         return res.status(500).json({ message: 'Server error.' });
     }
 });
 
-// === Mentor Request Cancellation ===
+// === Mentor Request Cancellation Route ===
 app.post('/request-cancellation', authenticateToken, async (req, res) => {
     if (req.user.role !== 'mentor') {
         return res.status(403).json({ message: 'Access forbidden.' });
@@ -313,6 +363,10 @@ app.post('/request-cancellation', authenticateToken, async (req, res) => {
     if (!sessionId || !reason) {
         return res.status(400).json({ message: 'Session ID and reason are required.' });
     }
+
+    // Sanitize reason
+    const sanitizedReason = xss(reason);
+
     const connection = await dbPool.getConnection();
     await connection.beginTransaction();
     try {
@@ -331,7 +385,7 @@ app.post('/request-cancellation', authenticateToken, async (req, res) => {
         );
         await connection.query(
             'INSERT INTO Cancellation_Requests (session_id, mentor_id, reason) VALUES (?, ?, ?)',
-            [sessionId, mentorId, reason]
+            [sessionId, mentorId, sanitizedReason]
         );
         await connection.commit();
         connection.release();
@@ -344,76 +398,76 @@ app.post('/request-cancellation', authenticateToken, async (req, res) => {
     }
 });
 
-// === Mentor Delete Available Slot ===
+// === Mentor Delete Available Slot Route ===
 app.delete('/delete-slot/:id', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'mentor') {
-        return res.status(403).json({ message: 'Access forbidden.' });
-    }
+    if (req.user.role !== 'mentor') { return res.status(403).json({ message: 'Access forbidden.' }); }
     const mentorId = req.user.userId;
     const sessionId = req.params.id;
-    if (!sessionId) {
-        return res.status(400).json({ message: 'Session ID is required.' });
-    }
-    const query = `
-        DELETE FROM Mentorship_Sessions
-        WHERE session_id = ? AND mentor_id = ? AND status = 'available';
-    `;
+
     try {
-        const [results] = await dbPool.query(query, [sessionId, mentorId]);
+        const [results] = await dbPool.query(
+            'DELETE FROM Mentorship_Sessions WHERE session_id = ? AND mentor_id = ? AND status = "available"',
+            [sessionId, mentorId]
+        );
         if (results.affectedRows === 0) {
-            return res.status(404).json({ message: 'Slot not found, already booked, or you do not own it.' });
+            return res.status(404).json({ message: 'Slot not found or not available.' });
         }
-        return res.status(200).json({ message: 'Available slot deleted successfully.' });
+        return res.status(200).json({ message: 'Slot deleted successfully.' });
     } catch (err) {
         console.error('Delete slot error:', err);
         return res.status(500).json({ message: 'Server error.' });
     }
 });
 
-// === Admin Route - Get Pending Mentors ===
-app.get('/admin/pending-mentors', authenticateToken, adminBouncer, async (req, res) => {
-    const query = `
-        SELECT user_id, name, email, created_at
-        FROM Users
-        WHERE role = 'mentor' AND verification_status = 'pending'
-        ORDER BY created_at ASC;
-    `;
+// === Create/Update Mentor Profile Route ===
+app.post('/create-profile', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'mentor') { return res.status(403).json({ message: 'Access forbidden.' }); }
+    const mentorId = req.user.userId;
+    const { headline, bio, linkedin_url } = req.body;
+    if (!headline || !bio) { return res.status(400).json({ message: 'Headline and Bio are required.' }); }
+
+    // Sanitize inputs
+    const sanitizedHeadline = xss(headline);
+    const sanitizedBio = xss(bio);
+    const sanitizedLinkedin = xss(linkedin_url);
+
     try {
-        const [results] = await dbPool.query(query);
-        return res.status(200).json(results);
+        const query = `
+            INSERT INTO Mentor_Profiles (user_id, headline, bio, linkedin_url)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE headline = VALUES(headline), bio = VALUES(bio), linkedin_url = VALUES(linkedin_url)
+        `;
+        await dbPool.query(query, [mentorId, sanitizedHeadline, sanitizedBio, sanitizedLinkedin]);
+        return res.status(201).json({ message: 'Profile updated successfully!' });
     } catch (err) {
-        console.error('Admin fetch error:', err);
+        console.error('Profile error:', err);
         return res.status(500).json({ message: 'Server error.' });
     }
 });
 
-// === Admin Route - Verify a Mentor ===
-app.post('/admin/verify-mentor', authenticateToken, adminBouncer, async (req, res) => {
-    const { mentorId } = req.body;
-    if (!mentorId) { return res.status(400).json({ message: 'Mentor ID is required.' }); }
-    const query = `
-        UPDATE Users
-        SET verification_status = 'verified'
-        WHERE user_id = ? AND role = 'mentor';
-    `;
+// === Check if Mentor Has Profile Route ===
+app.get('/check-profile', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'mentor') { return res.status(403).json({ message: 'Access forbidden.' }); }
+    const mentorId = req.user.userId;
     try {
-        const [results] = await dbPool.query(query, [mentorId]);
-        if (results.affectedRows === 0) {
-            return res.status(404).json({ message: 'Mentor not found or already verified.' });
-        }
-        return res.status(200).json({ message: 'Mentor verified successfully!' });
+        const [results] = await dbPool.query('SELECT * FROM Mentor_Profiles WHERE user_id = ?', [mentorId]);
+        return res.status(200).json({ hasProfile: results.length > 0 });
     } catch (err) {
-        console.error('Admin verify error:', err);
+        console.error('Check profile error:', err);
         return res.status(500).json({ message: 'Server error.' });
     }
 });
 
-// === Submit Feedback ===
+// === Submit Feedback Route ===
 app.post('/submit-feedback', authenticateToken, async (req, res) => {
     const raterId = req.user.userId;
     const { sessionId, score, comments } = req.body;
     if (req.user.role !== 'mentee') { return res.status(403).json({ message: 'Only mentees can leave feedback.' }); }
     if (!sessionId || !score) { return res.status(400).json({ message: 'Session ID and score are required.' }); }
+
+    // Sanitize comments
+    const sanitizedComments = xss(comments);
+
     try {
         const sessionQuery = 'SELECT mentor_id FROM Mentorship_Sessions WHERE session_id = ? AND mentee_id = ? AND status = "completed"';
         const [sessionResults] = await dbPool.query(sessionQuery, [sessionId, raterId]);
@@ -427,7 +481,7 @@ app.post('/submit-feedback', authenticateToken, async (req, res) => {
             return res.status(409).json({ message: 'You have already reviewed this session.' });
         }
         const insertQuery = 'INSERT INTO Feedback (session_id, rater_id, ratee_id, score, comments) VALUES (?, ?, ?, ?, ?)';
-        await dbPool.query(insertQuery, [sessionId, raterId, rateeId, score, comments]);
+        await dbPool.query(insertQuery, [sessionId, raterId, rateeId, score, sanitizedComments]);
         return res.status(201).json({ message: 'Feedback submitted successfully!' });
     } catch (err) {
         console.error('Feedback error:', err);
@@ -435,11 +489,15 @@ app.post('/submit-feedback', authenticateToken, async (req, res) => {
     }
 });
 
-// === Raise a Dispute ===
+// === Raise a Dispute Route ===
 app.post('/raise-dispute', authenticateToken, async (req, res) => {
     const raisedById = req.user.userId;
     const { bookingId, reason } = req.body;
     if (!bookingId || !reason) { return res.status(400).json({ message: 'Booking ID and reason are required.' }); }
+
+    // Sanitize reason
+    const sanitizedReason = xss(reason);
+
     const bookingQuery = 'SELECT * FROM Bookings WHERE booking_id = ? AND mentee_id = ?';
     const [bookingResults] = await dbPool.query(bookingQuery, [bookingId, raisedById]);
     if (bookingResults.length === 0) {
@@ -452,7 +510,7 @@ app.post('/raise-dispute', authenticateToken, async (req, res) => {
     }
     const insertQuery = 'INSERT INTO Disputes (booking_id, raised_by_id, reason) VALUES (?, ?, ?)';
     try {
-        await dbPool.query(insertQuery, [bookingId, raisedById, reason]);
+        await dbPool.query(insertQuery, [bookingId, raisedById, sanitizedReason]);
         return res.status(201).json({ message: 'Dispute raised successfully.' });
     } catch (err) {
         console.error('Dispute error:', err);
@@ -460,160 +518,117 @@ app.post('/raise-dispute', authenticateToken, async (req, res) => {
     }
 });
 
-// === Admin Get Open Disputes ===
-app.get('/admin/open-disputes', authenticateToken, adminBouncer, async (req, res) => {
-    const query = `
-        SELECT d.dispute_id, d.booking_id, d.reason, d.created_at, u.name as mentee_name
-        FROM Disputes d
-        JOIN Users u ON d.raised_by_id = u.user_id
-        WHERE d.status = 'open'
-        ORDER BY d.created_at ASC;
-    `;
+// === Admin: Get Pending Mentors ===
+app.get('/admin/pending-mentors', authenticateToken, adminBouncer, async (req, res) => {
     try {
-        const [results] = await dbPool.query(query);
-        return res.status(200).json(results);
+        const [results] = await dbPool.query('SELECT user_id, name, email, created_at FROM Users WHERE role = "mentor" AND verification_status = "pending"');
+        res.status(200).json(results);
     } catch (err) {
-        console.error('Dispute fetch error:', err);
-        return res.status(500).json({ message: 'Server error.' });
+        console.error('Admin pending mentors error:', err);
+        res.status(500).json({ message: 'Server error.' });
     }
 });
 
-// === Admin Resolve Dispute ===
+// === Admin: Verify Mentor ===
+app.post('/admin/verify-mentor', authenticateToken, adminBouncer, async (req, res) => {
+    const { mentorId } = req.body;
+    if (!mentorId) { return res.status(400).json({ message: 'Mentor ID is required.' }); }
+    try {
+        await dbPool.query('UPDATE Users SET verification_status = "verified" WHERE user_id = ?', [mentorId]);
+        res.status(200).json({ message: 'Mentor verified successfully.' });
+    } catch (err) {
+        console.error('Admin verify mentor error:', err);
+        res.status(500).json({ message: 'Server error.' });
+    }
+});
+
+// === Admin: Get Open Disputes ===
+app.get('/admin/open-disputes', authenticateToken, adminBouncer, async (req, res) => {
+    try {
+        const query = `
+            SELECT d.dispute_id, d.reason, u.name as mentee_name
+            FROM Disputes d
+            JOIN Users u ON d.raised_by_id = u.user_id
+            WHERE d.status = 'open';
+        `;
+        const [results] = await dbPool.query(query);
+        res.status(200).json(results);
+    } catch (err) {
+        console.error('Admin disputes error:', err);
+        res.status(500).json({ message: 'Server error.' });
+    }
+});
+
+// === Admin: Resolve Dispute ===
 app.post('/admin/resolve-dispute', authenticateToken, adminBouncer, async (req, res) => {
     const adminId = req.user.userId;
     const { disputeId, resolutionNotes } = req.body;
     if (!disputeId || !resolutionNotes) { return res.status(400).json({ message: 'Dispute ID and resolution notes are required.' }); }
+
+    // Sanitize notes
+    const sanitizedNotes = xss(resolutionNotes);
+
     const query = `
         UPDATE Disputes
         SET status = 'resolved', resolved_by_admin_id = ?, resolution_notes = ?
         WHERE dispute_id = ? AND status = 'open';
     `;
     try {
-        const [results] = await dbPool.query(query, [adminId, resolutionNotes, disputeId]);
+        const [results] = await dbPool.query(query, [adminId, sanitizedNotes, disputeId]);
         if (results.affectedRows === 0) {
             return res.status(404).json({ message: 'Dispute not found or already resolved.' });
         }
         return res.status(200).json({ message: 'Dispute resolved.' });
     } catch (err) {
-        console.error('Dispute resolve error:', err);
+        console.error('Admin resolve dispute error:', err);
         return res.status(500).json({ message: 'Server error.' });
     }
 });
 
-// === Admin Get Stats ===
-app.get('/admin/stats', authenticateToken, adminBouncer, async (req, res) => {
-    try {
-        const queries = `
-            SELECT COUNT(*) as totalMentees FROM Users WHERE role = 'mentee';
-            SELECT COUNT(*) as totalMentors FROM Users WHERE role = 'mentor' AND verification_status = 'verified';
-            SELECT COUNT(*) as totalSessions FROM Mentorship_Sessions WHERE status = 'completed';
-            SELECT SUM(fee) as totalRevenue FROM Mentorship_Sessions WHERE status = 'completed';
-        `;
-        const [results] = await dbPool.query(queries);
-        const stats = {
-            totalMentees: results[0][0].totalMentees,
-            totalMentors: results[1][0].totalMentors,
-            totalSessions: results[2][0].totalSessions,
-            totalRevenue: results[3][0].totalRevenue || 0
-        };
-        return res.status(200).json(stats);
-    } catch (err) {
-        console.error('Admin stats error:', err);
-        return res.status(500).json({ message: 'Server error.' });
-    }
-});
-
-// === Check if Mentor Profile Exists ===
-app.get('/check-profile', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'mentor') {
-        return res.status(403).json({ message: 'Not a mentor.' });
-    }
-    const mentorId = req.user.userId;
-    const query = 'SELECT * FROM Mentor_Profiles WHERE user_id = ?';
-    try {
-        const [results] = await dbPool.query(query, [mentorId]);
-        if (results.length > 0) {
-            return res.status(200).json({ hasProfile: true });
-        } else {
-            return res.status(200).json({ hasProfile: false });
-        }
-    } catch (err) {
-        console.error('Check profile error:', err);
-        return res.status(500).json({ message: 'Server error.' });
-    }
-});
-
-// === Mentor Create Profile ===
-app.post('/create-profile', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'mentor') {
-        return res.status(403).json({ message: 'Only mentors can create a profile.' });
-    }
-    const mentorId = req.user.userId;
-    const { headline, bio, linkedin_url } = req.body;
-    if (!headline || !bio) {
-        return res.status(400).json({ message: 'Headline and bio are required.' });
-    }
-    const query = 'INSERT INTO Mentor_Profiles (user_id, headline, bio, linkedin_url) VALUES (?, ?, ?, ?)';
-    try {
-        await dbPool.query(query, [mentorId, headline, bio, linkedin_url]);
-        return res.status(201).json({ message: 'Profile created successfully!' });
-    } catch (err) {
-        if (err.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: 'Profile already exists.' });
-        }
-        console.error('Create profile error:', err);
-        return res.status(500).json({ message: 'Server error.' });
-    }
-});
-
-// === Admin Get Cancellation Requests ===
+// === Admin: Get Cancellation Requests ===
 app.get('/admin/cancellation-requests', authenticateToken, adminBouncer, async (req, res) => {
-    const query = `
-        SELECT cr.request_id, cr.session_id, cr.reason, u.name as mentor_name
-        FROM Cancellation_Requests cr
-        JOIN Users u ON cr.mentor_id = u.user_id
-        WHERE cr.status = 'pending';
-    `;
     try {
+        const query = `
+            SELECT cr.request_id, cr.session_id, cr.reason, u.name as mentor_name
+            FROM Cancellation_Requests cr
+            JOIN Users u ON cr.mentor_id = u.user_id
+            WHERE cr.status = 'pending';
+        `;
         const [results] = await dbPool.query(query);
-        return res.status(200).json(results);
+        res.status(200).json(results);
     } catch (err) {
-        console.error('Fetch cancellation requests error:', err);
-        return res.status(500).json({ message: 'Server error.' });
+        console.error('Admin cancellation requests error:', err);
+        res.status(500).json({ message: 'Server error.' });
     }
 });
 
-// === Admin Approve Cancellation ===
+// === Admin: Approve Cancellation ===
 app.post('/admin/approve-cancellation', authenticateToken, adminBouncer, async (req, res) => {
     const adminId = req.user.userId;
     const { requestId, adminNotes } = req.body;
-    if (!requestId) {
-        return res.status(400).json({ message: 'Request ID is required.' });
-    }
+    if (!requestId) { return res.status(400).json({ message: 'Request ID is required.' }); }
+
+    // Sanitize notes
+    const sanitizedNotes = xss(adminNotes);
+
     const connection = await dbPool.getConnection();
     await connection.beginTransaction();
     try {
-        const [reqResults] = await connection.query(
-            'SELECT * FROM Cancellation_Requests WHERE request_id = ? AND status = "pending" FOR UPDATE',
-            [requestId]
-        );
-        if (reqResults.length === 0) {
+        const [reqResult] = await connection.query('SELECT * FROM Cancellation_Requests WHERE request_id = ?', [requestId]);
+        if (reqResult.length === 0) {
             await connection.rollback();
             connection.release();
-            return res.status(404).json({ message: 'Request not found or already handled.' });
+            return res.status(404).json({ message: 'Request not found.' });
         }
-        const request = reqResults[0];
+        const sessionId = reqResult[0].session_id;
+
         await connection.query(
             'UPDATE Cancellation_Requests SET status = "approved", resolved_by_admin_id = ?, admin_notes = ? WHERE request_id = ?',
-            [adminId, adminNotes, requestId]
+            [adminId, sanitizedNotes, requestId]
         );
         await connection.query(
-            'UPDATE Mentorship_Sessions SET status = "canceled", cancellation_reason = ? WHERE session_id = ?',
-            [request.reason, request.session_id]
-        );
-        await connection.query(
-            'UPDATE Bookings SET payment_status = "refunded" WHERE session_id = ?',
-            [request.session_id]
+            'UPDATE Mentorship_Sessions SET status = "canceled" WHERE session_id = ?',
+            [sessionId]
         );
         await connection.commit();
         connection.release();
@@ -621,13 +636,32 @@ app.post('/admin/approve-cancellation', authenticateToken, adminBouncer, async (
     } catch (err) {
         await connection.rollback();
         connection.release();
-        console.error('Approve cancellation error:', err);
+        console.error('Admin approve cancellation error:', err);
         return res.status(500).json({ message: 'Server error.' });
     }
 });
 
+// === Admin: Get Stats ===
+app.get('/admin/stats', authenticateToken, adminBouncer, async (req, res) => {
+    try {
+        const [mentees] = await dbPool.query('SELECT COUNT(*) as count FROM Users WHERE role = "mentee"');
+        const [mentors] = await dbPool.query('SELECT COUNT(*) as count FROM Users WHERE role = "mentor"');
+        const [sessions] = await dbPool.query('SELECT COUNT(*) as count FROM Mentorship_Sessions WHERE status = "completed"');
+        const [revenue] = await dbPool.query('SELECT SUM(fee) as total FROM Mentorship_Sessions WHERE status = "completed"');
 
-// --- 7. Start The Server (MUST BE LAST) ---
+        res.status(200).json({
+            totalMentees: mentees[0].count,
+            totalMentors: mentors[0].count,
+            totalSessions: sessions[0].count,
+            totalRevenue: revenue[0].total || 0
+        });
+    } catch (err) {
+        console.error('Admin stats error:', err);
+        res.status(500).json({ message: 'Server error.' });
+    }
+});
+
+// --- 7. Start Server ---
 app.listen(PORT, () => {
-    console.log(`🚀 Server is running on http://localhost:${PORT}`);
+    console.log(`Server running on http://localhost:${PORT}`);
 });

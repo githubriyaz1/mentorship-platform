@@ -47,15 +47,15 @@ function updateNavbar() {
             localStorage.removeItem('mentorConnectUser');
             localStorage.removeItem('mentorConnectRole');
             updateNavbar(); // Re-run to update UI
-            
+
             // If on a protected page, redirect to home
             const currentPage = window.location.pathname;
-            if (currentPage.includes('dashboard.html') || 
-                currentPage.includes('profile.html') || 
+            if (currentPage.includes('dashboard.html') ||
+                currentPage.includes('profile.html') ||
                 currentPage.includes('browse.html') ||
                 currentPage.includes('payment.html') ||
                 currentPage.includes('dispute.html')) {
-                 window.location.href = 'index.html';
+                window.location.href = 'index.html';
             }
         });
     }
@@ -63,7 +63,7 @@ function updateNavbar() {
 
 // This waits for the *entire HTML page* to load
 document.addEventListener("DOMContentLoaded", () => {
-    
+
     console.log("DOM fully loaded and parsed");
 
     // --- Check login status as soon as page loads ---
@@ -72,7 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- Get the Modal Instance ---
     const loginModalElement = document.getElementById('loginModal');
     const loginModalInstance = loginModalElement ? new bootstrap.Modal(loginModalElement) : null;
-    
+
     // --- 1. SIGNUP FORM LOGIC ---
     const signupForm = document.querySelector("#pills-signup form");
     if (signupForm) {
@@ -89,23 +89,23 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             const formData = { name, email, password, role };
-            
+
             try {
-                const response = await fetch('http://localhost:3001/register', {
+                const response = await fetch(`${API_BASE_URL}/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(formData)
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (response.ok) {
                     let alertMessage = `Welcome, ${name}! Please log in to continue.`;
                     if (role === 'mentor') {
                         alertMessage = `Welcome, ${name}! Your mentor account is created and is pending admin approval. You will be able to log in once verified.`;
                     }
                     alert(alertMessage);
-                    
+
                     signupForm.reset();
                     // Switch to login tab
                     const loginTab = document.getElementById('pills-login-tab');
@@ -130,12 +130,12 @@ document.addEventListener("DOMContentLoaded", () => {
             const formData = { email, password };
 
             try {
-                const response = await fetch('http://localhost:3001/login', {
+                const response = await fetch(`${API_BASE_URL}/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(formData)
                 });
-                
+
                 const data = await response.json();
 
                 if (response.ok) {
@@ -143,11 +143,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     localStorage.setItem('mentorConnectToken', data.token);
                     localStorage.setItem('mentorConnectUser', data.name);
                     localStorage.setItem('mentorConnectRole', data.role);
-                    
+
                     alert(`Welcome back, ${data.name}!`);
                     loginForm.reset();
                     if (loginModalInstance) loginModalInstance.hide();
-                    
+
                     // Redirect to dashboard
                     window.location.href = 'dashboard.html';
 
@@ -164,15 +164,15 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- 3. "Become a Mentor" Button Logic ---
     const becomeMentorBtn = document.getElementById('become-mentor-btn');
     if (becomeMentorBtn) {
-        
+
         const signupTab = document.getElementById('pills-signup-tab');
 
         becomeMentorBtn.addEventListener('click', (e) => {
             e.preventDefault(); // Stop the '#' link from jumping
-            
+
             // 1. Show the modal
             if (loginModalInstance) loginModalInstance.show();
-            
+
             // 2. Switch to the "Sign Up" tab
             if (signupTab) {
                 new bootstrap.Tab(signupTab).show();

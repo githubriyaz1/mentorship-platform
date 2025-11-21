@@ -1,6 +1,6 @@
 // This runs as soon as the payment.html page loads
 document.addEventListener("DOMContentLoaded", () => {
-    
+
     // 1. Get the session ID we saved from the profile page
     const sessionId = localStorage.getItem('pendingBookingId');
     const token = localStorage.getItem('mentorConnectToken');
@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const paymentForm = document.getElementById('payment-form');
     paymentForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
+
         const payButton = document.getElementById('pay-button');
         payButton.disabled = true;
         payButton.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
@@ -40,7 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function fetchSessionDetails(sessionId, token) {
     try {
-        const response = await fetch(`http://localhost:3001/session-details/${sessionId}`, {
+        const response = await fetch(`${API_BASE_URL}/session-details/${sessionId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -73,7 +73,7 @@ async function fetchSessionDetails(sessionId, token) {
 async function bookSession(sessionId, token) {
     // This is the same function from profile.js, but now it returns true/false
     try {
-        const response = await fetch('http://localhost:3001/book', {
+        const response = await fetch(`${API_BASE_URL}/book`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
